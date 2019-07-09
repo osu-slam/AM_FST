@@ -1,0 +1,19 @@
+Welcome to our experiment! Press middle finger button to continue. 
+Press middle finger button to continue through instructions.
+Press index finger button to go back.
+You will be presented one of three types of stimuli:
+1) A sentence read by a female speaker,
+2) Noise, like someone is blowing into a microphone,
+3) or silence. 
+If you hear noise, randomly press a button. 
+If you hear a sentence, please respond as follows:
+Each sentence will involve two people; one male and one female. 
+Think about who is performing the action (i.e. the actor) of the sentence. 
+If the actor is female, press your index finger. 
+If the actor is male, press your middle finger. 
+Please stare at the fixation cross on screen during each run. 
+Before we begin the main experiment, we have a short training exercise for you. 
+Do your best to answer quickly and correctly to each sentence. 
+If you take too long to answer, your response will not count. 
+Remember--Female actor, press your index finger. Male actor, press your middle finger. 
+Any questions? If not, press your middle finger when you're ready to begin.
