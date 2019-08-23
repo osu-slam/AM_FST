@@ -44,106 +44,188 @@ scan.TR     = 1.000;
 scan.epiNum = 8; 
 
 % Number of stimuli. Likely to change. 
-NumSpStim = 192; 
-NumStim   = 200; 
+% NumSpStim  = 192; 
+% NumStim    = 200;
+% p.runsMax = 6; 
 
 % Timing
-p.runs   = length(subj.firstRun:subj.lastRun); 
-p.events = 16; % May change
+p.runsMax = 4; % ONLY ENOUGH SENTENCES FOR 4 BLOCKS RIGHT NOW
+p.events = 24; % May change
+% 4 high OR
+% 4 high SR
+% 4 low OR
+% 4 low SR
+% 4 noise
+% 4 silence
+p.sentences = 16; % how many sentence stimuli per block?
 
-p.presTime   = 4.000;  % 4 seconds
-p.epiTime    = 10.000; % 10 seconds
-p.eventTime  = p.presTime + p.epiTime;
+p.presTime = 4.000;  % 4 seconds
+p.jitter   = 1.000; % Maximum stimuli duration is ~2.75 seconds
 
+p.rxnWindow = 3.000;  % 3 seconds
+
+p.epiTime   = 8.000;  % 8 seconds because I said so
+p.eventTime = p.presTime + p.epiTime;
 p.runDuration = p.epiTime + ...   % After first pulse
     p.eventTime * p.events + ...  % Each event
     p.eventTime;                  % After last acquisition
 
-p.rxnWindow = 3.000;  % 3 seconds
-p.jitWindow = 0.900;  % 1 second, see notes below
-    % For this experiment, the first second of the silent window will not
-    % have stimuli presented. To code for this, I add an additional 1 s
-    % to the jitterKey. So, the jitter window ranges from 1 s to 2 s.
-
-% Training override
-if Training
-    NumSpStim = 4; 
-    NumStim   = 5; 
-    p.events  = 5; 
-end
+p.vocode = '15ch'; % how many channels of vocoding?
     
 %% Paths
 cd ..
-expDir = pwd; 
+dir_exp = pwd; 
 
-StimuliLoc = [expDir, '\stimuli_lang'];
-ScriptsLoc = [expDir, '\scripts'];
-ResultsLoc = [expDir, '\results'];
-FuncsLoc   = [ScriptsLoc, '\functions'];
+dir_stim = fullfile(dir_exp, 'stimuli');
+dir_stim_clear  = fullfile(dir_stim, 'clear_resample'); 
+dir_stim_vocode = fullfile(dir_stim, p.vocode); 
+dir_stim_base   = fullfile(dir_stim, 'noi_sil'); 
 
-cd ..
-RTBoxLoc = [pwd, '\RTBox']; 
+dir_scripts = fullfile(dir_exp, 'scripts');
+dir_results = fullfile(dir_exp, 'results');
+dir_funcs   = fullfile(dir_scripts, 'functions');
 
 Instructions = 'instructions_lang.txt';
 
 %% Preallocating timing variables
-if Training
-    maxNumRuns = 1;
-else
-    maxNumRuns = 6; 
-end
+eventStart    = NaN(p.events, p.runsMax);
+stimStart     = NaN(p.events, p.runsMax); 
+stimEnd       = NaN(p.events, p.runsMax); 
+eventEnd      = NaN(p.events, p.runsMax); 
+key_stimStart  = NaN(p.events, p.runsMax); 
+key_stimEnd    = NaN(p.events, p.runsMax); 
+stimDuration  = NaN(p.events, p.runsMax); 
+key_eventStart = NaN(p.events, p.runsMax); 
 
-eventStart    = NaN(p.events, maxNumRuns);
-stimStart     = NaN(p.events, maxNumRuns); 
-stimEnd       = NaN(p.events, maxNumRuns); 
-eventEnd      = NaN(p.events, maxNumRuns); 
-stimStartKey  = NaN(p.events, maxNumRuns); 
-stimEndKey    = NaN(p.events, maxNumRuns); 
-stimDuration  = NaN(p.events, maxNumRuns); 
-eventStartKey = NaN(p.events, maxNumRuns); 
+AbsEvStart   = NaN(p.events, p.runsMax); 
+AbsStimStart = NaN(p.events, p.runsMax); 
+AbsStimEnd   = NaN(p.events, p.runsMax); 
+AbsRxnEnd    = NaN(p.events, p.runsMax); 
+AbsEvEnd     = NaN(p.events, p.runsMax); 
 
-AbsEvStart   = NaN(p.events, maxNumRuns); 
-AbsStimStart = NaN(p.events, maxNumRuns); 
-AbsStimEnd   = NaN(p.events, maxNumRuns); 
-AbsRxnEnd    = NaN(p.events, maxNumRuns); 
-AbsEvEnd     = NaN(p.events, maxNumRuns); 
+respTime = cell(p.events, p.runsMax); 
+respKey  = cell(p.events, p.runsMax); 
 
-respTime = cell(p.events, maxNumRuns); 
-respKey  = cell(p.events, maxNumRuns); 
-
-firstPulse = NaN(1, maxNumRuns); 
-runEnd     = NaN(1, maxNumRuns); 
+firstPulse = NaN(1, p.runsMax); 
+runEnd     = NaN(1, p.runsMax); 
 
 %% File names
-if Training
-    filetag = [subj.Num '_' subj.Init '_practice_']; 
-else
-    filetag = [subj.Num '_' subj.Init '_']; 
+results_xlsx = [subj.Num '_lang.xlsx']; 
+results_mat  = [subj.Num '_lang.mat']; 
+
+%% Load stimuli
+% Clear
+files_clear = dir(fullfile(dir_stim_clear, '*.wav')); 
+ad_clear = cell(1, length(files_clear)); 
+fs_clear = zeros(1, length(files_clear)); 
+
+for ii = 1:length(files_clear)
+    thisfile = fullfile(dir_stim_clear, files_clear(ii).name); 
+    [ad_clear{ii}, fs_clear(ii)] = audioread(thisfile); 
 end
 
-ResultsTxt = [filetag 'lang_results.txt']; 
-ResultsXls = [filetag 'lang_results.xlsx']; 
-Variables  = [filetag 'lang_variables.mat']; 
+if ~all(fs_clear(1) == fs_clear)
+    error('fs clear is not equal across all stimuli!')
+end
+
+fs_clear = fs_clear(1); 
+
+% Vocode
+files_vocode = dir(fullfile(dir_stim_vocode, '*.wav')); 
+ad_vocode = cell(1, length(files_vocode)); 
+fs_vocode = zeros(1, length(files_vocode)); 
+
+for ii = 1:length(files_vocode)
+    thisfile = fullfile(dir_stim_vocode, files_vocode(ii).name); 
+    [ad_vocode{ii}, fs_vocode(ii)] = audioread(thisfile); 
+end
+
+if ~all(fs_vocode(1) == fs_vocode)
+    error('fs vocode is not equal across all stimuli!')
+end
+
+fs_vocode = fs_vocode(1); 
+
+% Noise and silence
+files_base = dir(fullfile(dir_stim_base, '*.wav')); 
+ad_base = cell(1, length(files_base)); 
+fs_base = zeros(1, length(files_base)); 
+
+for ii = 1:length(files_base)
+    thisfile = fullfile(dir_stim_base, files_base(ii).name); 
+    [ad_base{ii}, fs_base(ii)] = audioread(thisfile); 
+end
+
+if ~all(fs_base(1) == fs_base)
+    error('fs vocode is not equal across all stimuli!')
+end
+
+fs_base = fs_base(1); 
+
+% Clean up
+if any(fs_clear ~= [fs_vocode fs_base])
+    error('fs clear vocode and base are not equal!')
+end
+
+fs = fs_clear; 
+dur_clear  = cellfun((@(x) length(x)/fs), ad_clear); 
+dur_vocode = cellfun((@(x) length(x)/fs), ad_vocode); 
+dur_base   = cellfun((@(x) length(x)/fs), ad_base); 
+
+if any(dur_clear > 3) || any(dur_vocode > 3) || any(dur_base > 3)
+    error('stim are too long!')
+end
+
+stim_all = [files_clear; files_vocode; files_base]; stim_all = {stim_all.name};
+ad_all   = [ad_clear, ad_vocode, ad_base]; 
+dur_all  = [dur_clear, dur_vocode, dur_base]; 
+
+%% Create keys
+% Each block consists of 8 sentences, 4 high quality and 4 degraded. There
+% will also be 4 noise and 4 silence events. 
+% Events
+key_sent = cellfun((@(x) x(1:2)), stim_all, 'UniformOutput', false); 
+temp = cell(1, length(find(key_noise | key_silence))); 
+for ii = 1:length(temp); temp{ii} = 'nan'; end
+key_sent(key_noise | key_silence) = temp; 
+key_sent = cellfun(@str2double, key_sent); 
+
+order_sentence = reshape(1:max(key_sent), p.sentences, p.runsMax); 
+order_sentence = (4*(order_sentence-1))+1; 
+
+key_stim = nan(p.events, p.runsMax); 
+for rr = 1:p.runsMax
+    thesesent = Shuffle(order_sentence(:, rr)); 
+    orsr_mf = repelem([0 1 2 3]', 4); 
+    % 0 is OF
+    % 1 is OM
+    % 2 is SF
+    % 3 is SM
     
-%% Determine protocol
-if Training
-    protocol_order = {'multi'}; 
-else
-    cd(ScriptsLoc)
-    load('master_scan_order.mat')
-    protocol_order = cell(1, 6); 
-    for s = 1:10
-        if master{1, s} == subj.Num
-            for k = 1:6
-                protocol_order{k} = master{k+1, s}; 
-            end
-        end
-    end
-    cd(expDir)
+    clearvocode = repmat([0 length(files_clear)]', [8 1]); 
+    noi_sil = find(key_noise | key_silence)'; 
+    
+    order_all = Shuffle(orsr_mf + clearvocode) + thesesent; 
+    order_all = Shuffle([order_all; noi_sil]); 
+    
+    key_stim(:, rr) = order_all; 
 end
 
-%% Load PTB and stimuli
-% PTB
+% Now is a good time to run check_cb
+% check_cb
+
+% Timing
+key_jitter = rand(p.events, p.runsMax); 
+
+temp = p.epiTime + [0:p.eventTime:((p.events-1)*p.eventTime)]'; %#ok<NBRAK>
+key_eventStart = repmat(temp, [1, p.runsMax]); 
+
+key_stimStart = key_eventStart + key_jitter; 
+key_stimEnd   = key_stimStart  + rawStimDur(eventKey(:,rr))';
+rxnEndKey   = key_stimEnd + p.rxnWindow; 
+eventEndKey = key_eventStart + p.eventTime;
+
+%% PTB
 [wPtr, rect] = Screen('OpenWindow', 1, 185);
 DrawFormattedText(wPtr, 'Please wait, preparing experiment...');
 Screen('Flip', wPtr);
@@ -152,107 +234,76 @@ centerY = rect(4)/2;
 crossCoords = [-30, 30, 0, 0; 0, 0, -30, 30]; 
 HideCursor(); 
 
-% Stimuli, check counterbalance
-cd(FuncsLoc) 
-[audio, fs, rawStimDur, jitterKey, eventKey, answerKey, speechKey] = ...
-    LoadStimAndKeys(StimuliLoc, p.events, subj.firstRun, subj.lastRun, NumSpStim, maxNumRuns, Training);
-fs = fs{1}; % Above func checks that all fs are the same.  
-
 pahandle = PsychPortAudio('Open', [], [], [], fs);
 
 if ~Training
-    cd(FuncsLoc)
+    cd(dir_funcs)
     stimulicheck(NumSpStim, eventKey); 
 end
-cd(expDir)
+cd(dir_exp)
 
-for i = subj.firstRun:subj.lastRun
-    stimDuration(:, i) = rawStimDur(eventKey(:,i))'; 
+for ii = subj.firstRun:subj.lastRun
+    stimDuration(:, ii) = rawStimDur(eventKey(:,ii))'; 
 end
 
 % Check if using RTBox or Keyboard
 if ~ConnectedToRTBox
     cd(RTBoxLoc)
     RTBox('fake', 1); 
-    cd(expDir)
+    cd(dir_exp)
 end
 
 %% Prepare test
 try
-    for run = subj.firstRun:subj.lastRun
-
-        DrawFormattedText(wPtr, 'Please wait, preparing run...');
-        Screen('Flip', wPtr); 
-
-        % Prepare timing keys
-        eventStartKey(:, run) = p.epiTime + [0:p.eventTime:((p.events-1)*p.eventTime)]'; %#ok<NBRAK>
-        stimStartKey(:, run)  = eventStartKey(:, run) + jitterKey(:, run); 
-
-        if Training
-            stimEndKey = stimStartKey + rawStimDur(eventKey)';
-        else
-            stimEndKey(:, run) = stimStartKey(:, run) + rawStimDur(eventKey(:,run))';
-        end
-
-        rxnEndKey   = stimEndKey + p.rxnWindow; 
-        eventEndKey = eventStartKey + p.eventTime;
-
-        % Display instructions
-        if Training
-            cd(FuncsLoc)
-            DisplayInstructions_bkfw_rtbox(Instructions, wPtr, RTBoxLoc); 
-            cd(expDir)
-        end
-
-
+    for rr = subj.firstRun:subj.lastRun
         % Wait for first pulse
         DrawFormattedText(wPtr, ['Waiting for first pulse. ', ... 
-            protocol_order{run}, num2str(run)]); 
+            protocol_order{rr}, num2str(rr)]); 
         Screen('Flip', wPtr); 
         
         cd(RTBoxLoc)
         RTBox('Clear'); 
         RTBox('UntilTimeout', 1);
-        firstPulse(run) = RTBox('WaitTR'); 
+        firstPulse(rr) = RTBox('WaitTR'); 
 
         % Draw onto screen after recieving first pulse
         Screen('DrawLines', wPtr, crossCoords, 2, 0, [centerX, centerY]);
         Screen('Flip', wPtr); 
 
         % Generate absolute time keys
-        AbsEvStart(:, run)   = firstPulse(run) + eventStartKey(:,run); 
-        AbsStimStart(:, run) = firstPulse(run) + stimStartKey(:,run); 
-        AbsStimEnd(:, run)   = firstPulse(run) + stimEndKey(:,run); 
-        AbsRxnEnd(:, run)    = firstPulse(run) + rxnEndKey(:,run); 
-        AbsEvEnd(:, run)     = firstPulse(run) + eventEndKey(:,run); 
+        AbsEvStart(:, rr)   = firstPulse(rr) + key_eventStart(:,rr); 
+        AbsStimStart(:, rr) = firstPulse(rr) + key_stimStart(:,rr); 
+        AbsStimEnd(:, rr)   = firstPulse(rr) + key_stimEnd(:,rr); 
+        AbsRxnEnd(:, rr)    = firstPulse(rr) + rxnEndKey(:,rr); 
+        AbsEvEnd(:, rr)     = firstPulse(rr) + eventEndKey(:,rr); 
 
-        WaitTill(firstPulse(run) + p.epiTime); 
+        WaitTill(firstPulse(rr) + p.epiTime); 
 
         %% Present audio stimuli
         for event = 1:p.events
-            eventStart(event, run) = GetSecs(); 
+            eventStart(event, rr) = GetSecs(); 
 
-            PsychPortAudio('FillBuffer', pahandle, audio{eventKey(event, run)});
-            WaitTill(AbsStimStart(event, run)); 
+            PsychPortAudio('FillBuffer', pahandle, audio{eventKey(event, rr)});
+            WaitTill(AbsStimStart(event, rr)); 
 
-            stimStart(event, run) = GetSecs; 
+            stimStart(event, rr) = GetSecs; 
             PsychPortAudio('Start', pahandle, 1);
-            WaitTill(AbsStimEnd(event, run)); 
-            stimEnd(event, run) = GetSecs; 
+            WaitTill(AbsStimEnd(event, rr)); 
+            stimEnd(event, rr) = GetSecs; 
             RTBox('Clear'); 
 
-            [respTime{event, run}, respKey{event, run}] = RTBox(AbsRxnEnd(event, run)); 
+            [respTime{event, rr}, respKey{event, rr}] = RTBox(AbsRxnEnd(event, rr)); 
 
-            WaitTill(AbsEvEnd(event, run));    
-            eventEnd(event, run) = GetSecs(); 
+            WaitTill(AbsEvEnd(event, rr));    
+            eventEnd(event, rr) = GetSecs(); 
         end
 
         WaitSecs(p.eventTime); 
-        runEnd(run) = GetSecs(); 
+        runEnd(rr) = GetSecs(); 
 
-        if run ~= subj.lastRun
+        if rr ~= subj.lastRun
             endstring = ['End of run. Press any button when ready to continue. Experimenters, prepare for '...
-                protocol_order{run+1}, num2str(run+1)]; 
+                protocol_order{rr+1}, num2str(rr+1)]; 
             DrawFormattedText(wPtr, endstring); 
             Screen('Flip', wPtr); 
             RTBox('Clear'); 
@@ -264,10 +315,10 @@ try
     
 catch err
     sca; 
-    runEnd(run) = GetSecs();  %#ok<NASGU>
-    cd(FuncsLoc)
+    runEnd(rr) = GetSecs();  %#ok<NASGU>
+    cd(dir_funcs)
     OutputData
-    cd(ScriptsLoc)
+    cd(dir_scripts)
     PsychPortAudio('Close'); 
     rethrow(err)
 end
@@ -277,8 +328,8 @@ PsychPortAudio('Close');
 DisableKeysForKbCheck([]); 
 
 %% Save data
-cd(FuncsLoc)
+cd(dir_funcs)
 disp('Please wait, saving data...')
 OutputData
 disp('All done!')
-cd(ScriptsLoc)
+cd(dir_scripts)
