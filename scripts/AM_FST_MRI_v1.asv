@@ -22,7 +22,7 @@ end
 InitializePsychSound
 clearvars; clc; 
 codeStart = GetSecs(); 
-% AudioDevice = PsychPortAudio('GetDevices'); % For debugging
+AudioDevice = PsychPortAudio('GetDevices'); 
 
 %% Parameters
 prompt = {...
@@ -176,12 +176,8 @@ if any(dur_clear > 3) || any(dur_vocode > 3) || any(dur_base > 3)
 end
 
 stim_all = [files_clear; files_vocode; files_base]; stim_all = {stim_all.name};
-num_files_clear = length(files_clear); % how many sentences
-clear files_clear files_vocode files_base
 ad_all   = [ad_clear, ad_vocode, ad_base]; 
-clear ad_clear ad_vocode ad_base
 dur_all  = [dur_clear, dur_vocode, dur_base]; 
-clear dur_clear dur_vocode dur_base
 
 %% Create keys
 % Each block consists of 8 sentences, 4 high quality and 4 degraded. There
@@ -217,7 +213,7 @@ for rr = 1:p.runsMax
     % 2 is SF, actually 3, mod 1, answer 1
     % 3 is SM, actually 4, mod 0, answer 2
     
-    clearvocode = repmat([0 num_files_clear]', [8 1]); 
+    clearvocode = repmat([0 length(files_clear)]', [8 1]); 
     noi_sil = find(events_noise | events_silence)'; 
     
     order_all = Shuffle(orsr_mf + clearvocode) + thesesent; 
@@ -228,14 +224,15 @@ for rr = 1:p.runsMax
     noise   = ismember(order_all, find(events_noise)); 
     silence = ismember(order_all, find(events_silence));  
     sent_mf = find(~ismember(order_all, [find(events_noise) find(events_silence)])); 
-    temp = mod(order_all(sent_mf), 2); 
-    male   = temp == 0;
-    female = temp == 1;
-    
+    sent_mf = 
     key_answer(noise, rr) = 3; 
     key_answer(silence, rr) = 0; 
-    key_answer(sent_mf(male), rr) = 2; 
-    key_answer(sent_mf(female), rr) = 1; 
+    temp = mod(order_all(sent_mf), 2); 
+    male    = sent_mf == 0;
+    female  = sent_mf == 1;
+    key_answer(find(sent_mf))
+    mod(order_all(sent_mf), 2)
+    
 end
 
 % Now is a good time to run check_cb
@@ -329,7 +326,6 @@ catch err
     PsychPortAudio('Close'); 
     rethrow(err)
 end
-
 %% Closing down
 Screen('CloseAll');
 PsychPortAudio('Close'); 
