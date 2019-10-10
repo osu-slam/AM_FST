@@ -6,6 +6,7 @@
 % 08/08/17  Started keeping changelog. --MH
 % 08/08/17  Now allows for mulitple runs. --MH
 % 08/10/17  Ready for subject 3. --MH
+% 10/10/19  Updating for AM_FST. --MH
 
 %% Preallocate all results_mat
 % Timing and subject response
@@ -15,7 +16,7 @@ response = NaN(p.events, p.runsMax);
 % Xls file
 headers = {'BLOCK', 'Jitter key', 'Actual jitter', ... 
         'Stim duration key', 'Actual stim duration', ...
-        'Event duration', 'Event key', 'Answer key', ... 
+        'Actual Event duration', 'Event key', 'Answer key', ... 
         'Subj response', 'RT'}; 
 
 %% Saving relevant timing information
@@ -30,7 +31,6 @@ real_eventDur = real_eventEnd - real_eventStart;
 for ii = 1:p.events
     for jj = 1:size(real_respKey, 2)
         if isempty(real_respKey{ii, jj})
-            real_respKey{ii, jj}  = '0'; 
             real_respTime{ii, jj} = NaN; 
         end
         reaction(ii, jj) = real_respTime{ii, jj} - real_stimEnd(ii, jj); 
@@ -76,5 +76,5 @@ end
 %% Save data
 xlswrite(results_xlsx, data)
 
-clear data ad_all
+clear data ad_all_rms
 save(results_mat)
