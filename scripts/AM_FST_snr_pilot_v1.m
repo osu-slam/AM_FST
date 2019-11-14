@@ -1,5 +1,6 @@
-%% AM_FST
+%% AM_FST_snr_pilot
 % Script to run FST for AM Ported from my previous isss_multi script. 
+% Cloned on 11/14/19 to pilot SNR in seniors. 
 % Author - Matt Heard
 
 % MM/DD/YY -- CHANGELOG
@@ -10,6 +11,11 @@
 % 07/09/19 -- Cloned for new project. Lots of updates to make. MH
 % 10/04/19 -- Updates begin in earnest with a new stimuli set. 
 % 10/10/19 -- Debug mode added
+% 11/14/19 -- Cloned from AM_FST_MRI to pilot the correct SNR for seniors.
+%   MH
+
+% TODO:
+% 11/14 -- Code the data output function. MH
 
 %% Startup
 sca; DisableKeysForKbCheck([]); KbQueueStop; 
@@ -22,7 +28,7 @@ end
 
 InitializePsychSound
 clearvars; clc; 
-DEBUG = 0; 
+DEBUG = 1; 
 codeStart = GetSecs(); 
 
 if DEBUG
@@ -31,6 +37,10 @@ if DEBUG
 end
 
 %% Parameters
+% We have about 45 minutes to test this task as we are not collecting any
+% other metrics. Also, it's a behavioral task so the timing is much easier.
+% 
+
 if DEBUG
     warning('USING DEBUG DEFAULTS!')
     dlg_ans = {'xxxx', '1', '9', '0'}; 
@@ -38,8 +48,7 @@ else
     prompt = {...
         'Subject number (####YL):', ...
         'First run (1)', ... 
-        'Last run (9)', ... 
-        'RTBox connected (0/1):', ...
+        'Last run (4)', ... 
         }; 
     dlg_ans = inputdlg(prompt); 
 end
@@ -48,47 +57,25 @@ end
 subj.Num  = dlg_ans{1};
 subj.firstRun = str2double(dlg_ans{2}); 
 subj.lastRun  = str2double(dlg_ans{3}); 
-ConnectedToRTBox = str2double(dlg_ans{4}); 
-
-% Scan paradigms
-% Will likely change after meeting with Xiangrui
-p.TR     = 1.000; 
-p.epiNum = 8; 
-
-% Number of stimuli. Likely to change. 
-% NumSpStim  = 192; 
-% NumStim    = 200;
-% p.runsMax = 6; 
+ConnectedToRTBox = 0; 
 
 % Timing
-p.runsMax = 9; % Now enough for 9?
-p.events = 24; % Events per block, may change
-% 4 hard OR
-% 4 hard SR
-% 4 easy OR
-% 4 easy SR
-% 4 noise
-% 4 silence
-p.sentences  = 16; % how many sentence stimuli per block?
+
+p.snr = [-3, -1, 1, 3]; % SNR between babble and speech 
+% Piloting to determine proper SNR for artificial speech and naturalistic
+% babble. Let's check many values, starting with [-3, -1, 1, 3]--too hard,
+% now on -2, -1, 0, 1
+% Four blocks means we could test up to 36 sentences in each block. 
+
+% Testing 144 sentences, maaaybe 6 second per trial... that's a total of 15
+% minutes in the worst case scenario!
 p.structures = 144; % how many sentence structures?
 
-p.presTime = 4.000; % 4 seconds
-p.jitter   = 0.500; % Maximum stimuli duration is ~2.75 seconds
-% Jitter should be half of TR to prevent interference?
+p.runsMax = length(p.snr); 
+p.events = floor(p.structures/length(p.snr)); % Events per block, may change
 
-p.rxnWindow = 3.000;  % 3 seconds
-
-p.epiTime   = p.TR * p.epiNum;  % 8 seconds because I said so
-p.eventTime = p.presTime + p.epiTime;
-p.runDuration = p.epiTime + ...   % After first pulse
-    p.eventTime * p.events + ...  % Each event
-    p.eventTime;                  % After last acquisition
-
-% p.vocode = '15ch'; % how many channels of vocoding?
-p.snr = 3; % SNR between babble and speech (hard condition, easy condition tests clear speech)
-%  1
-% -1
-% -3
+p.jitter    = 2; % Maximum stimuli duration is ~2.75 seconds
+p.rxnWindow = 10.000; % 10 seconds, starting after the sentence starts to play
 
 %% Paths
 cd ..
@@ -127,17 +114,18 @@ results_xlsx = [subj.Num '_lang.xlsx'];
 results_mat  = [subj.Num '_lang.mat']; 
 
 %% Load stimuli
-ad_count = 1; 
 files_clear = dir(fullfile(dir_stim_clear, '*.wav')); 
 fs_clear = zeros(1, length(files_clear)); 
-ad_all = cell(1, 2*length(files_clear) + 4*p.runsMax); % clear, vocode, noise, no silence yet
+ad_all = cell(length(p.snr)+1, length(files_clear)); % clear and babble only
+% size [SNRs + 1, audio]
+% the first row is clear stimuli
+% rows 2 through 5 are vocoded
 
 disp('loading clear stimuli...')
 for ii = 1:length(files_clear)
     thisfile = fullfile(dir_stim_clear, files_clear(ii).name); 
     [tempAudio, fs_clear(ii)] = audioread(thisfile); 
-    ad_all{ad_count} = [tempAudio'; tempAudio']; 
-    ad_count = ad_count + 1; 
+    ad_all{1, ii} = [tempAudio'; tempAudio']; 
 end
 
 disp('done!')
@@ -149,6 +137,7 @@ end
 fs = fs_clear(1); 
 
 % Add babble to clear stimuli
+% When creating many SNR, things are different...
 cfg.noisefile = fullfile(dir_stim, 'babble_track_330m_mono_44100.wav'); 
 cfg.prestim  = 0.120;
 cfg.poststim = 0.120;
@@ -156,33 +145,34 @@ cfg.snrs = p.snr;
 cfg.fs = fs; 
 cd(dir_stim)
 disp('adding babble...')
+if ~DEBUG
+    warning off
+end
+
 ad_babble = jp_addnoise_hwk_mh(dir_stim_clear, cfg); % DOES NOT SET RMS
-for ii = 1:length(ad_babble)
-    ad_all{ad_count} = [ad_babble{ii}, ad_babble{ii}]'; 
-    ad_count = ad_count + 1; 
+
+if ~DEBUG
+    warning on
+end
+
+for ii = 1:size(ad_babble, 1)
+    for jj = 1:size(ad_babble, 2)
+        ad_all{jj+1, ii} = [ad_babble{ii}, ad_babble{ii}]'; 
+    end
+    
 end
 
 disp('done!')
-
-% Noise 
-disp('making noise stimuli...')
-noise_stim = randi(length(files_clear), [1, 4*p.runsMax]); 
-for ii = noise_stim % number of noise trials
-    tempAudio = jp_vocode_mh(ad_all{ii}(1, :), 1, fs); 
-    ad_all{ad_count} = [tempAudio; tempAudio]; 
-    ad_count = ad_count + 1;     
-end
-
-disp('done!')
+% No noise trials
 
 % Equalize RMS
-ad_all_rms = jp_equalizerms_mh(ad_all, 'verbose'); 
+if DEBUG
+    ad_all_rms = jp_equalizerms_mh_v2(ad_all, 'verbose'); 
+else
+    ad_all_rms = jp_equalizerms_mh_v2(ad_all); 
+end
 
-% Silence
-disp('loading silence...')
-tempAudio = audioread('silence01.wav'); 
-ad_all_rms{ad_count} = [tempAudio, tempAudio]'; 
-disp('done!')
+% No silence
 
 % Clean up
 dur_all = cellfun((@(x) length(x)/fs), ad_all_rms); 
@@ -204,63 +194,35 @@ clear ad_all ad_babble tempAudio
 % key_eventEnd
 
 % Events
-events_clear   = 1:length(files_clear); 
-events_babble  = length(files_clear)+1:2*length(files_clear);
-events_noise   = 2*length(files_clear)+1:2*length(files_clear)+4*p.runsMax; 
-matrix_noise   = reshape(events_noise, [4, p.runsMax]); 
-events_silence = 2*length(files_clear)+4*p.runsMax+1; 
-
-if events_silence ~= length(ad_all_rms)
-    error('stimuli are not loaded correctly?')
-end
-
-key_sentence = reshape(Shuffle(1:p.structures), p.sentences, p.runsMax); 
+% Dramatically simplified since we are just assessing babble!
+key_sentence = reshape(Shuffle(1:p.structures), p.events, p.runsMax); 
 key_sentence = (4*(key_sentence-1))+1; 
 
 key_stim   = nan(p.events, p.runsMax); 
 key_answer = nan(p.events, p.runsMax); 
 for rr = 1:p.runsMax
     thesesent = key_sentence(:, rr); 
-    orsr_mf = repelem([0 1 2 3]', 4); 
+    orsr_mf = Shuffle(repelem([0 1 2 3]', p.events/4)); 
     % 0 is OF, actually 1, mod 1, answer 1
     % 1 is OM, actually 2, mod 0, answer 2
     % 2 is SF, actually 3, mod 1, answer 1
     % 3 is SM, actually 4, mod 0, answer 2
-    
-    clearbabble = repmat([0 length(files_clear)]', [8 1]); 
-    noi_sil = [matrix_noise(:, rr); repmat(events_silence, [4 1])]; 
-    
-    order_all = Shuffle(orsr_mf + clearbabble) + thesesent; 
-    order_all = Shuffle([order_all; noi_sil]); 
+    order_all = orsr_mf + thesesent;
     
     key_stim(:, rr) = order_all; 
     
-    noise   = ismember(order_all, events_noise); 
-    silence = ismember(order_all, events_silence);  
-    sent_mf = find(~ismember(order_all, [events_noise events_silence])); 
-    temp = mod(order_all(sent_mf), 2); 
+    temp = mod(order_all, 2); 
     male   = temp == 0;
     female = temp == 1;
     
-    key_answer(noise, rr) = 3; 
-    key_answer(silence, rr) = 0; 
-    key_answer(sent_mf(male), rr) = 2; 
-    key_answer(sent_mf(female), rr) = 1; 
+    key_answer(male, rr) = 2; 
+    key_answer(female, rr) = 1; 
 end
 
-% Now is a good time to run check_cb
-% check_cb
-
 % Timing
-key_jitter = p.jitter * rand(p.events, p.runsMax); 
-
-temp = p.epiTime + [0:p.eventTime:((p.events-1)*p.eventTime)]'; %#ok<NBRAK>
-key_eventStart = repmat(temp, [1, p.runsMax]); 
-key_stimStart  = key_eventStart + key_jitter; 
-key_stimDur    = dur_all(key_stim); 
-key_stimEnd    = key_stimStart  + key_stimDur;
-key_rxnEnd     = key_stimEnd    + p.rxnWindow; 
-key_eventEnd   = key_eventStart + p.eventTime;
+% So much easier now!
+key_jitter = 1 + p.jitter * rand(p.events, p.runsMax); 
+whichBlock = Shuffle(1:4); 
 
 %% PTB
 if DEBUG
@@ -281,53 +243,47 @@ RTBox('fake', ~ConnectedToRTBox);
 RTBox('UntilTimeout', 1);
 Screen('TextSize', wPtr, 42); 
 
+RTBox('ButtonNames',{'left' 'right' 'space' '4'}); 
+
 %% Prepare test
 try
     for rr = subj.firstRun:subj.lastRun
+        thisBlock = ad_all_rms(whichBlock(rr)+1, :); 
+        
         % Wait for first pulse
-        DrawFormattedText(wPtr, ['Waiting for first pulse. Run ' num2str(rr)], 'center', 'center'); 
+        DrawFormattedText(wPtr, ['Press space to begin block ' num2str(rr)], 'center', 'center'); 
         Screen('Flip', wPtr); 
         
         RTBox('Clear'); 
-        firstPulse(rr) = RTBox('WaitTR'); 
+        firstPulse(rr) = RTBox(inf); 
 
         % Draw onto screen after recieving first pulse
         Screen('DrawLines', wPtr, crossCoords, 2, 0, [centerX, centerY]);
         Screen('Flip', wPtr); 
 
         % Generate absolute time keys
-        abs_eventStart(:, rr) = firstPulse(rr) + key_eventStart(:, rr); 
-        abs_stimStart(:, rr)  = firstPulse(rr) + key_stimStart(:, rr); 
-        abs_stimEnd(:, rr)    = firstPulse(rr) + key_stimEnd(:, rr); 
-        abs_rxnEnd(:, rr)     = firstPulse(rr) + key_rxnEnd(:, rr); 
-        abs_eventEnd(:, rr)   = firstPulse(rr) + key_eventEnd(:, rr); 
-        
-        WaitTill(firstPulse(rr) + p.epiTime); 
+        WaitTill(firstPulse(rr) + 5); 
         
         %% Present audio stimuli
         for ev = 1:p.events
             real_eventStart(ev, rr) = GetSecs(); 
 
-            PsychPortAudio('FillBuffer', pahandle, ad_all_rms{key_stim(ev, rr)});
-            WaitTill(abs_stimStart(ev, rr)-0.1); 
+            PsychPortAudio('FillBuffer', pahandle, thisBlock{key_stim(ev, rr)});
+            WaitTill(GetSecs() + key_jitter(ev, rr) - 0.1); 
             
             real_stimStart(ev, rr) = PsychPortAudio('Start', pahandle, ... 
                 1, abs_stimStart(ev, rr), 1);
-            WaitTill(abs_stimEnd(ev, rr)); 
-            real_stimEnd(ev, rr) = GetSecs(); 
             RTBox('Clear'); 
 
-            [real_respTime{ev, rr}, real_respKey{ev, rr}] = RTBox(abs_rxnEnd(ev, rr)); 
-
-            WaitTill(abs_eventEnd(ev, rr));    
+            [real_respTime{ev, rr}, real_respKey{ev, rr}] = RTBox(GetSecs() + p.rxnWindow); 
             real_eventEnd(ev, rr) = GetSecs(); 
         end
 
-        WaitSecs(p.eventTime); 
+        WaitSecs(5); 
         runEnd(rr) = GetSecs(); 
 
         if rr ~= subj.lastRun
-            endstring = 'End of run. Press any button when ready to continue.'; 
+            endstring = 'End of run. Press space to continue.'; 
             DrawFormattedText(wPtr, endstring, 'center', 'center'); 
             Screen('Flip', wPtr); 
             RTBox('Clear'); 
@@ -340,7 +296,7 @@ catch err
     sca; 
     runEnd(rr) = GetSecs();  %#ok<NASGU>
     cd(dir_scripts)
-    OutputData
+%     OutputData
     PsychPortAudio('Close'); 
     rethrow(err)
 end
@@ -353,5 +309,5 @@ DisableKeysForKbCheck([]);
 %% Save data
 cd(dir_scripts)
 disp('Please wait, saving data...')
-OutputData
+% OutputData
 disp('All done!')
