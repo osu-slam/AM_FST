@@ -43,7 +43,7 @@ end
 
 if DEBUG
     warning('USING DEBUG DEFAULTS!')
-    dlg_ans = {'xxxx', '1', '9', '0'}; 
+    dlg_ans = {'xxxx', '1', '4'}; 
 else
     prompt = {...
         'Subject number (####YL):', ...
@@ -110,8 +110,8 @@ firstPulse = NaN(1, p.runsMax);
 runEnd     = NaN(1, p.runsMax); 
 
 %% File names
-results_xlsx = [subj.Num '_lang.xlsx']; 
-results_mat  = [subj.Num '_lang.mat']; 
+results_xlsx = [subj.Num '_lang_pilot.xlsx']; 
+results_mat  = [subj.Num '_lang_pilot.mat']; 
 
 %% Load stimuli
 files_clear = dir(fullfile(dir_stim_clear, '*.wav')); 
@@ -199,7 +199,7 @@ key_sentence = reshape(Shuffle(1:p.structures), p.events, p.runsMax);
 key_sentence = (4*(key_sentence-1))+1; 
 
 key_stim   = nan(p.events, p.runsMax); 
-key_answer = nan(p.events, p.runsMax); 
+key_answer = cell(p.events, p.runsMax); 
 for rr = 1:p.runsMax
     thesesent = key_sentence(:, rr); 
     orsr_mf = Shuffle(repelem([0 1 2 3]', p.events/4)); 
@@ -215,8 +215,15 @@ for rr = 1:p.runsMax
     male   = temp == 0;
     female = temp == 1;
     
-    key_answer(male, rr) = 2; 
-    key_answer(female, rr) = 1; 
+    for ev = 1:p.events
+        if male(ev) == 1
+            key_answer{ev, rr} = 'right'; 
+        elseif female(ev) == 1
+            key_answer{ev, rr} = 'left'; 
+        end
+        
+    end
+    
 end
 
 % Timing
@@ -288,6 +295,8 @@ try
             Screen('Flip', wPtr); 
             RTBox('Clear'); 
             RTBox(inf); 
+            Screen('Flip', wPtr);
+            WaitTill(GetSecs()+2); 
         end 
         
     end
@@ -296,7 +305,7 @@ catch err
     sca; 
     runEnd(rr) = GetSecs();  %#ok<NASGU>
     cd(dir_scripts)
-%     OutputData
+    OutputData_snr_pilot
     PsychPortAudio('Close'); 
     rethrow(err)
 end
@@ -309,5 +318,5 @@ DisableKeysForKbCheck([]);
 %% Save data
 cd(dir_scripts)
 disp('Please wait, saving data...')
-% OutputData
+OutputData_snr_pilot
 disp('All done!')
