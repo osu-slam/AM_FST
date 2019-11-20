@@ -94,17 +94,17 @@ Instructions = 'instructions_lang.txt';
 %% Preallocating timing variables
 real_eventStart = NaN(p.events, p.runsMax);
 real_stimStart  = NaN(p.events, p.runsMax); 
-real_stimEnd    = NaN(p.events, p.runsMax); 
+% real_stimEnd    = NaN(p.events, p.runsMax); 
 real_eventEnd   = NaN(p.events, p.runsMax); 
 
 real_respTime = cell(p.events, p.runsMax); 
 real_respKey  = cell(p.events, p.runsMax); 
 
-abs_eventStart = NaN(p.events, p.runsMax); 
-abs_stimStart  = NaN(p.events, p.runsMax); 
-abs_stimEnd    = NaN(p.events, p.runsMax); 
-abs_rxnEnd     = NaN(p.events, p.runsMax); 
-abs_eventEnd   = NaN(p.events, p.runsMax); 
+% abs_eventStart = NaN(p.events, p.runsMax); 
+% abs_stimStart  = NaN(p.events, p.runsMax); 
+% abs_stimEnd    = NaN(p.events, p.runsMax); 
+% abs_rxnEnd     = NaN(p.events, p.runsMax); 
+% abs_eventEnd   = NaN(p.events, p.runsMax); 
 
 firstPulse = NaN(1, p.runsMax); 
 runEnd     = NaN(1, p.runsMax); 
@@ -253,10 +253,10 @@ try
             real_eventStart(ev, rr) = GetSecs(); 
             
             PsychPortAudio('FillBuffer', pahandle, thisBlock{key_sentence_block(ev, rr)});
-            WaitTill(GetSecs() + key_jitter(ev, rr) - 0.1); 
+            WaitTill(GetSecs() + key_jitter(ev, rr)); 
             
             real_stimStart(ev, rr) = PsychPortAudio('Start', pahandle, ... 
-                1, abs_stimStart(ev, rr), 1);
+                1, [], 1);
             RTBox('Clear'); 
 
             [real_respTime{ev, rr}, real_respKey{ev, rr}] = RTBox(GetSecs() + p.rxnWindow); 
