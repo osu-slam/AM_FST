@@ -164,12 +164,13 @@ key_jitter = 2 + p.jitter * rand(p.events, p.runsMax);
 whichBlock = Shuffle(1:4); 
 
 %% Load stimuli
-these_sent = unique(key_stim); % find which stim to load
+these_sent = unique(key_stim); % find which stim to load. already counter-balanced!
 files_clear = dir(fullfile(dir_stim_clear, '*.wav')); 
 these_files = files_clear(these_sent); 
+key_files = reshape({these_files(key_sentence).name}, p.events, p.runsMax); 
 these_files = cellfun((@(x, y) [x filesep y]), {these_files(:).folder}, {these_files(:).name}, 'UniformOutput', false)'; 
 
-ad_all = cell(length(p.snr), p.events); % babble only
+ad_all = cell(p.events, length(p.snr)); % babble only
 disp('done!')
 
 % Add babble to clear stimuli
@@ -182,11 +183,11 @@ cfg.stereo = 1;
 cd(dir_stim)
 
 for ii = 1:p.runsMax
-    this_run = p.events*(ii-1)+1:p.events*ii; 
+    this_run = key_sentence(:, ii); 
     cfg.snrs = p.snr(ii); 
 
     ad_babble = jp_addnoise_hwk_mh(these_files(this_run), cfg); % DOES NOT SET RMS
-    ad_all(ii, :) = ad_babble; 
+    ad_all(:, ii) = ad_babble; 
     clear ad_babble
 end
 
@@ -197,6 +198,7 @@ if DEBUG
     ad_all_rms = jp_equalizerms_mh_v2(ad_all, 'verbose'); 
 else
     ad_all_rms = jp_equalizerms_mh_v2(ad_all); 
+    % ad_all_rms has every sentence, in presentation order
 end
 
 % Clean up
@@ -221,6 +223,7 @@ maleX   = rect(3)/3;
 femaleX = 2*rect(3)/3; 
 
 pahandle = PsychPortAudio('Open', 5, [], [], p.fs); % check at scanner
+
 RTBox('fake', ~ConnectedToRTBox); 
 RTBox('UntilTimeout', 1);
 Screen('TextSize', wPtr, 42); 
@@ -230,10 +233,10 @@ RTBox('ButtonNames',{'left' 'right' 'space' '4'});
 %% Prepare test
 try
     for rr = subj.firstRun:subj.lastRun
-        thisBlock = ad_all_rms(whichBlock(rr), :); 
+%         thisBlock = ad_all_rms(whichBlock(rr), :); 
         
         % Wait for first pulse
-        DrawFormattedText(wPtr, ['Press space to begin block ' num2str(rr)], 'center', 'center'); 
+        DrawFormattedText(wPtr, ['Press space to begin block  ' num2str(rr)], 'center', 'center'); 
         Screen('Flip', wPtr); 
         
         RTBox('Clear'); 
@@ -252,14 +255,15 @@ try
         for ev = 1:p.events
             real_eventStart(ev, rr) = GetSecs(); 
             
-            PsychPortAudio('FillBuffer', pahandle, thisBlock{key_sentence_block(ev, rr)});
+            PsychPortAudio('FillBuffer', pahandle, ad_all_rms{ev, rr});
             WaitTill(GetSecs() + key_jitter(ev, rr)); 
             
             real_stimStart(ev, rr) = PsychPortAudio('Start', pahandle, ... 
                 1, [], 1);
+            
             RTBox('Clear'); 
-
             [real_respTime{ev, rr}, real_respKey{ev, rr}] = RTBox(GetSecs() + p.rxnWindow); 
+            
             real_eventEnd(ev, rr) = GetSecs(); 
         end
 
