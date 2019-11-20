@@ -241,8 +241,8 @@ try
 
         % Draw onto screen after recieving first pulse
 %         Screen('DrawLines', wPtr, crossCoords, 2, 0, [centerX, centerY]);
-        DrawFormattedText(wPtr, 'Male', 'center', 'center', [], [], [], [], [], [], [0 0 centerX rect(4)]);
-        DrawFormattedText(wPtr, 'Female', 'center', 'center', [], [], [], [], [], [], [centerX 0 rect(3) rect(4)]);
+        DrawFormattedText(wPtr, 'Female', 'center', 'center', [], [], [], [], [], [], [0 0 centerX rect(4)]);
+        DrawFormattedText(wPtr, 'Male', 'center', 'center', [], [], [], [], [], [], [centerX 0 rect(3) rect(4)]);
         Screen('Flip', wPtr); 
 
         % Generate absolute time keys
