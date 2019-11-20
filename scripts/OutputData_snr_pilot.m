@@ -91,5 +91,5 @@ end
 %% Save data
 xlswrite(results_xlsx, data)
 
-clear data ad_all_rms files_clear thisBlock
+clear data ad_all_rms files_clear these_files thisBlock
 save(results_mat)

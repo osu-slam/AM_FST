@@ -26,6 +26,7 @@ function outputfiles = jp_addnoise_hwk_mh(soundfiles, cfg)
 % 09/16/19 -- the code has been modified to be used within the experimental
 %     code. noise sound to be added is randomly selected from the whole
 %     range of noise wav file -- HWK
+% Edited for MATLAB 2017a. Also outputs a PTB-friendly format -- MJH
 
 
 if ~isfield(cfg, 'prestim') || isempty(cfg.prestim)
@@ -50,6 +51,10 @@ end
 
 if ~isfield(cfg, 'noisefile')
     error('Must specify path to noise file in CFG.noisefile');
+end
+
+if ~isfield(cfg, 'stereo')
+    cfg.stereo = 0;
 end
 
 % error checking
@@ -120,7 +125,12 @@ for i = 1:length(soundfiles)
         if max(yNew) > 1
             warning('Signal number %d clipping at %g.', i, max(yNew));
         end
-        outputfiles{i,j} = yNew;
+        
+        if cfg.stereo
+            outputfiles{i,j} = [yNew yNew]'; 
+        else
+            outputfiles{i,j} = yNew';
+        end
 
 %         % write new file
 %         [pth, nm, ext] = fileparts(thisSound);
