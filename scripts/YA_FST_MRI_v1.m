@@ -11,8 +11,9 @@
 % 10/04/19 -- Updates begin in earnest with a new stimuli set. 
 % 10/10/19 -- Debug mode added
 % 01/13/20 -- Forked into YA version:
-%   - Switched back to traditional ISSS
-%   - 
+%   + Switched back to traditional ISSS
+%   + Implementing fix for timing error
+%   ~ Still need to counterbalance stimuli presentation!  
 
 %% Startup
 sca; DisableKeysForKbCheck([]); KbQueueStop; 
@@ -79,8 +80,7 @@ p.sentences  = 16; % how many sentence stimuli per block?
 p.structures = 144; % how many sentence structures?
 
 p.presTime = 4.000; % 4 seconds
-p.jitter   = 0.500; % Maximum stimuli duration is ~2.75 seconds
-% Jitter should be half of TR to prevent interference?
+p.jitter   = 1.000; % Jitter should be half of TR to prevent interference?
 
 p.rxnWindow = 3.000;  % 3 seconds, should we expand this?
 
@@ -123,6 +123,12 @@ abs_stimStart  = NaN(p.events, p.runsMax);
 abs_stimEnd    = NaN(p.events, p.runsMax); 
 abs_rxnEnd     = NaN(p.events, p.runsMax); 
 abs_eventEnd   = NaN(p.events, p.runsMax); 
+
+abs_eventStart_delta(:, rr) = NaN(p.events, p.runsMax); 
+abs_stimStart_delta(:, rr)  = NaN(p.events, p.runsMax); 
+abs_stimEnd_delta(:, rr)    = NaN(p.events, p.runsMax); 
+abs_rxnEnd_delta(:, rr)     = NaN(p.events, p.runsMax); 
+abs_eventEnd_delta(:, rr)   = NaN(p.events, p.runsMax); 
 
 firstPulse = NaN(1, p.runsMax); 
 runEnd     = NaN(1, p.runsMax); 
@@ -257,7 +263,12 @@ end
 % check_cb
 
 % Timing
-key_jitter = p.jitter * rand(p.events, p.runsMax); 
+while 1 % use this for loop to ensure jitter is longer than 0.001
+    key_jitter = p.jitter * rand(p.events, p.runsMax); 
+    if all(all(key_jitter > 0.001))
+        break
+    end
+end
 
 temp = p.epiTime + [0:p.eventTime:((p.events-1)*p.eventTime)]'; %#ok<NBRAK>
 key_eventStart = repmat(temp, [1, p.runsMax]); 
@@ -305,7 +316,7 @@ try
         abs_stimStart(:, rr)  = firstPulse(rr) + key_stimStart(:, rr); 
         abs_stimEnd(:, rr)    = firstPulse(rr) + key_stimEnd(:, rr); 
         abs_rxnEnd(:, rr)     = firstPulse(rr) + key_rxnEnd(:, rr); 
-        abs_eventEnd(:, rr)   = firstPulse(rr) + key_eventEnd(:, rr); 
+        abs_eventEnd(:, rr)   = firstPulse(rr) + key_eventEnd(:, rr);  
         
         WaitTill(firstPulse(rr) + p.epiTime); 
         
@@ -313,18 +324,27 @@ try
         for ev = 1:p.events
             real_eventStart(ev, rr) = GetSecs(); 
 
-            PsychPortAudio('FillBuffer', pahandle, ad_all_rms{key_stim(ev, rr)});
-            WaitTill(abs_stimStart(ev, rr)-0.1); 
+            abs_stimStart_delta(ev, rr) = real_eventStart(ev, rr) + ...
+                key_jitter(ev, rr); 
+            
+            PsychPortAudio('FillBuffer', pahandle, ... 
+                ad_all_rms{key_stim(ev, rr)});
+            WaitTill(abs_stimStart_delta(ev, rr) - 0.1); 
             
             real_stimStart(ev, rr) = PsychPortAudio('Start', pahandle, ... 
-                1, abs_stimStart(ev, rr), 1);
-            WaitTill(abs_stimEnd(ev, rr)); 
-            real_stimEnd(ev, rr) = GetSecs(); 
+                1, abs_stimStart_delta(ev, rr), 1);
+            
+            abs_rxnEnd_delta(ev, rr) = abs_stimStart_delta(ev, rr) + ... 
+                key_stimDur(ev, rr) + p.rxnWindow; 
+            abs_eventEnd_delta(ev, rr) = real_eventStart(ev, rr) + ...
+                p.eventTime;
+            
             RTBox('Clear'); 
-
-            [real_respTime{ev, rr}, real_respKey{ev, rr}] = RTBox(abs_rxnEnd(ev, rr)); 
-
-            WaitTill(abs_eventEnd(ev, rr));    
+            [real_respTime{ev, rr}, real_respKey{ev, rr}] = ... 
+                RTBox(abs_rxnEnd_delta(ev, rr)); 
+            
+            WaitTill(abs_eventEnd_delta(ev, rr) - 0.1); 
+            RTBox('WaitTR'); % added delay because of scanner error
             real_eventEnd(ev, rr) = GetSecs(); 
         end
 
