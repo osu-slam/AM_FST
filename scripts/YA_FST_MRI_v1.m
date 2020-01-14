@@ -13,7 +13,11 @@
 % 01/13/20 -- Forked into YA version:
 %   + Switched back to traditional ISSS
 %   + Implementing fix for timing error
+%   + Adjusted output column for easy analysis later
+%   + Removed empty column (Real Stim Duration) because timing broke it
 %   ~ Still need to counterbalance stimuli presentation!  
+%   ~ New jitter which ensures it is no longer than (max allowed by
+%     duration) or 1s long
 
 %% Startup
 sca; DisableKeysForKbCheck([]); KbQueueStop; 
@@ -26,7 +30,7 @@ end
 
 InitializePsychSound
 clearvars; clc; 
-DEBUG = 0; 
+DEBUG = 1; 
 codeStart = GetSecs(); 
 
 if DEBUG
@@ -124,18 +128,18 @@ abs_stimEnd    = NaN(p.events, p.runsMax);
 abs_rxnEnd     = NaN(p.events, p.runsMax); 
 abs_eventEnd   = NaN(p.events, p.runsMax); 
 
-abs_eventStart_delta(:, rr) = NaN(p.events, p.runsMax); 
-abs_stimStart_delta(:, rr)  = NaN(p.events, p.runsMax); 
-abs_stimEnd_delta(:, rr)    = NaN(p.events, p.runsMax); 
-abs_rxnEnd_delta(:, rr)     = NaN(p.events, p.runsMax); 
-abs_eventEnd_delta(:, rr)   = NaN(p.events, p.runsMax); 
+abs_eventStart_delta = NaN(p.events, p.runsMax); 
+abs_stimStart_delta  = NaN(p.events, p.runsMax); 
+abs_stimEnd_delta    = NaN(p.events, p.runsMax); 
+abs_rxnEnd_delta     = NaN(p.events, p.runsMax); 
+abs_eventEnd_delta   = NaN(p.events, p.runsMax); 
 
 firstPulse = NaN(1, p.runsMax); 
 runEnd     = NaN(1, p.runsMax); 
 
 %% File names
-results_xlsx = [subj.Num '_lang.xlsx']; 
-results_mat  = [subj.Num '_lang.mat']; 
+results_xlsx = ['YA_' subj.Num '_lang.xlsx']; 
+results_mat  = ['YA_' subj.Num '_lang.mat']; 
 
 %% Load stimuli
 ad_count = 1; 
@@ -169,7 +173,7 @@ cd(dir_stim)
 disp('adding babble...')
 ad_babble = jp_addnoise_hwk_mh(dir_stim_clear, cfg); % DOES NOT SET RMS
 for ii = 1:length(ad_babble)
-    ad_all{ad_count} = [ad_babble{ii}, ad_babble{ii}]'; 
+    ad_all{ad_count} = [ad_babble{ii}', ad_babble{ii}']'; 
     ad_count = ad_count + 1; 
 end
 
@@ -312,11 +316,11 @@ try
         Screen('Flip', wPtr); 
 
         % Generate absolute time keys
-        abs_eventStart(:, rr) = firstPulse(rr) + key_eventStart(:, rr); 
-        abs_stimStart(:, rr)  = firstPulse(rr) + key_stimStart(:, rr); 
-        abs_stimEnd(:, rr)    = firstPulse(rr) + key_stimEnd(:, rr); 
-        abs_rxnEnd(:, rr)     = firstPulse(rr) + key_rxnEnd(:, rr); 
-        abs_eventEnd(:, rr)   = firstPulse(rr) + key_eventEnd(:, rr);  
+%         abs_eventStart(:, rr) = firstPulse(rr) + key_eventStart(:, rr); 
+%         abs_stimStart(:, rr)  = firstPulse(rr) + key_stimStart(:, rr); 
+%         abs_stimEnd(:, rr)    = firstPulse(rr) + key_stimEnd(:, rr); 
+%         abs_rxnEnd(:, rr)     = firstPulse(rr) + key_rxnEnd(:, rr); 
+%         abs_eventEnd(:, rr)   = firstPulse(rr) + key_eventEnd(:, rr);  
         
         WaitTill(firstPulse(rr) + p.epiTime); 
         
@@ -343,9 +347,10 @@ try
             [real_respTime{ev, rr}, real_respKey{ev, rr}] = ... 
                 RTBox(abs_rxnEnd_delta(ev, rr)); 
             
-            WaitTill(abs_eventEnd_delta(ev, rr) - 0.1); 
-            RTBox('WaitTR'); % added delay because of scanner error
-            real_eventEnd(ev, rr) = GetSecs(); 
+            % added delay because of scanner error
+            WaitTill(abs_eventEnd_delta(ev, rr) - 0.5); % can wait a while!
+            RTBox('Clear'); 
+            real_eventEnd(ev, rr) = RTBox('WaitTR'); 
         end
 
         WaitSecs(p.eventTime); 
@@ -365,7 +370,7 @@ catch err
     sca; 
     runEnd(rr) = GetSecs();  %#ok<NASGU>
     cd(dir_scripts)
-    OutputData
+    OutputData_v2
     PsychPortAudio('Close'); 
     rethrow(err)
 end
