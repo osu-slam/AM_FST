@@ -23,6 +23,8 @@
 %   + Had to add jp_scripts
 % 01/24/20 -- New stimuli and counterbalancing
 %   TODO: new stimuli loading!
+% 01/27/20 -- New stimuli loading done! Changed to female voice stim. 
+% 01/28/20 -- Removed jitter. 
 
 %% Startup
 clearvars; clc; 
@@ -35,7 +37,7 @@ catch
 end
 
 InitializePsychSound
-DEBUG = 1; 
+DEBUG = 0; 
 codeStart = GetSecs(); 
 Screen('Preference','SkipSyncTests', 1); 
 
@@ -66,8 +68,8 @@ ConnectedToRTBox = str2double(dlg_ans{4});
 %% Scan paradigm
 % Will likely change after meeting with Xiangrui
 % Reverted back to traditional ISSS
-p.TR     = 1.000; 
-p.epiNum = 8; 
+p.TR     = 2.000; 
+p.epiNum = 4; 
 % 40 minutes of scan time!
 
 % Timing
@@ -78,7 +80,7 @@ p.sentences  = 9; % how many sentence stimuli per block?
 p.structures = 9; % how many sentence structures?
 
 p.presTime = 4.000; % 4 seconds
-p.jitter   = 1.000; % Jitter should be half of TR to prevent interference?
+p.jitter   = 0; % No jitter because FIR (thanks Xiangrui
 
 p.rxnWindow = 3.000;  % 3 seconds, should we expand this?
 
@@ -88,25 +90,19 @@ p.runDuration = p.epiTime + ...   % After first pulse
     p.eventTime * p.events + ...  % Each event
     p.eventTime;                  % After last acquisition
 
-p.snr = [3 0]; % SNR between babble and speech
-               % (clear, easy, hard)
-%  1 % -1 % -3
-warning('We have not discussed SNR yet!')
-warning('Are we using jitter?')
+p.snr = [0 -6]; % SNR between babble and speech
+                % (clear, easy, hard)
+p.rate = [0.75 1 1.25]; % make sure to put in ascending order
 
 %% Paths
 cd ..
 dir_exp = pwd; 
 
 dir_stim = fullfile(dir_exp, 'stimuli');
-cfg.noisefile = fullfile(dir_stim, 'babble_4speakers.wav'); 
-dir_stim_all = fullfile(dir_stim, 'YA_FST_v3_all_norm'); 
+dir_stim_all = fullfile(dir_stim, 'YA_FST_v3_select_babble_v5_norm'); 
 
 dir_scripts = fullfile(dir_exp, 'scripts');
 dir_results = fullfile(dir_exp, 'results');
-dir_funcs   = fullfile(dir_scripts, 'functions');
-
-Instructions = 'instructions_lang.txt';
 
 %% Preallocating timing variables
 real_eventStart = NaN(p.events, p.runsMax);
@@ -156,8 +152,10 @@ results_mat  = ['YA_' subj.Num '_lang.mat'];
 % Thanks Hyun!!!
 runs = 1:p.runsMax;
 syn = ["O","S"];
-cla = ["","SNR3","SNR0"];
-spr = ["0.75","1.0","1.25"];
+cla = ["", ['SNR' num2str(max(p.snr))], ['SNR' num2str(min(p.snr))]];
+spr = string(p.rate); 
+spr(strcmp(spr , "1")) = "1.0"; 
+
 ntrial = 9*2*3*3;
 
 cond = strings(ntrial,6);
@@ -195,18 +193,9 @@ end
 key_events = []; 
 for rr = runs
     thisblock = cond(strcmp(cond(:, 1), num2str(rr)), :); 
-    idx = randi(18); 
     % Randomly grab trial from next block to serve as noise
-    if rr == p.runsMax
-        noisetrial = cond(strcmp(cond(:, 1), num2str(1)), :); 
-    else
-        noisetrial = cond(strcmp(cond(:, 1), num2str(rr+1)), :);
-    end
     
-    noisetrial = noisetrial(idx, :);
-    noisetrial = noisetrial(1, 6);
-    
-    noise = [num2str(rr), "N", "N", "N", "N", noisetrial];
+    noise = [num2str(rr), "N", "N", "N", "N", "noise"];
     silence = [num2str(rr), "S", "S", "S", "S", "silence01"];
     
     thisblock = [thisblock; noise; silence]; 
@@ -220,7 +209,7 @@ snr_hard = ['SNR' num2str(min(p.snr))];
 
 for ii = 1:length(key_events)
     if strcmp(key_events(ii, 3), "N") % if noise
-        key_events(ii, 6) = strcat(key_events(ii, 6), '_01ch.wav');
+        key_events(ii, 6) = strcat(key_events(ii, 6), '.wav');
     elseif strcmp(key_events(ii, 3), "S") % if silence
         key_events(ii, 6) = strcat(key_events(ii, 6), '.wav');
     elseif strcmp(key_events(ii, 3), snr_hard) % if hard babble
@@ -238,13 +227,13 @@ end
 clear cond thisblock
 
 % Timing
-while 1 % use this for loop to ensure jitter is longer than 0.001
-    key_jitter = p.jitter * rand(p.events, p.runsMax); 
-    if all(all(key_jitter > 0.001))
-        break
-    end
-end
-
+% while 1 % use this for loop to ensure jitter is longer than 0.001
+%     key_jitter = p.jitter * rand(p.events, p.runsMax); 
+%     if all(all(key_jitter > 0.001))
+%         break
+%     end
+% end
+key_jitter = 0.1*ones(p.events, p.runsMax); % add slight delay
 temp = p.epiTime + [0:p.eventTime:((p.events-1)*p.eventTime)]'; %#ok<NBRAK>
 key_eventStart = repmat(temp, [1, p.runsMax]); 
 key_stimStart  = key_eventStart + key_jitter; 
@@ -298,7 +287,7 @@ key_rxnEnd     = key_stimEnd    + p.rxnWindow;
 if DEBUG
     [wPtr, rect] = Screen('OpenWindow', 1, 185, [0 0 1280 720]);
 else
-    [wPtr, rect] = Screen('OpenWindow', 0, 185);
+    [wPtr, rect] = Screen('OpenWindow', 1, 185);
 end
 
 DrawFormattedText(wPtr, 'Please wait, preparing experiment...');
