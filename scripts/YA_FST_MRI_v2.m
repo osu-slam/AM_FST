@@ -99,7 +99,7 @@ cd ..
 dir_exp = pwd; 
 
 dir_stim = fullfile(dir_exp, 'stimuli');
-dir_stim_all = fullfile(dir_stim, 'YA_FST_v3_select_babble_v5_norm'); 
+dir_stim_all = fullfile(dir_stim, 'YA_FST_v3_select_babble_v6_norm'); 
 
 dir_scripts = fullfile(dir_exp, 'scripts');
 dir_results = fullfile(dir_exp, 'results');
